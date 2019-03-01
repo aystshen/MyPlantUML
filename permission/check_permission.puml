@@ -1,0 +1,55 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor Yellow
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor Yellow
+	ParticipantFontColor Black
+}
+
+title Check Permission
+
+participant ContextImpl.java as ContextImpl
+participant ActivityManagerService.java as ActivityManagerService
+participant ActivityManager.java as ActivityManager
+participant PackageManagerService.java as PackageManagerService
+participant PermissionsState.java as PermissionsState
+participant "Settings.java\n(com/android/server/pm/)" as Settings #99FF99
+participant "SettingBase.java\n(com/android/server/pm/)" as SettingBase #99FF99
+
+->ContextImpl:checkPermission()
+activate ContextImpl
+ContextImpl -> ActivityManagerService:checkPermission()
+activate ActivityManagerService
+ActivityManagerService -> ActivityManagerService:checkComponentPermission()
+activate ActivityManagerService
+ActivityManagerService->ActivityManager:checkComponentPermission()
+activate ActivityManager
+ActivityManager->PackageManagerService:checkUidPermission()
+activate PackageManagerService
+PackageManagerService->Settings:getUserIdLPr()
+activate Settings
+Settings->PackageManagerService
+deactivate Settings
+PackageManagerService->SettingBase:getPermissionsState()
+activate SettingBase
+SettingBase->PackageManagerService
+deactivate SettingBase
+PackageManagerService->PermissionsState:hasPermission()
+activate PermissionsState
+PermissionsState -> PackageManagerService
+deactivate PermissionsState
+PackageManagerService -> ActivityManager
+deactivate PackageManagerService
+ActivityManager -> ActivityManagerService
+deactivate ActivityManager
+ActivityManagerService -> ContextImpl
+deactivate ActivityManagerService
+deactivate ActivityManagerService
+<-ContextImpl:return
+deactivate ContextImpl
+
+@enduml

@@ -1,0 +1,16 @@
+@startuml
+title 从nandflash启动上电取得第一条指令流程（纯硬件操作）
+
+participant nandflash
+participant "nandflash controller"
+participant SRAM
+participant CPU #99FF99
+
+"nandflash controller"->nandflash:nandflash控制器将nandflash\n（0~4K）内容加载到SRAM
+note left : nandflash没有地址总线，\n因此不可以直接寻址，\n必须使用SRAM做为载体
+nandflash->SRAM:nandflash（0~4K）内容加载到SRAM
+"nandflash controller"->SRAM:将SRAM起始地址设置为0x00\n(不同CPU起始地址不尽相同)
+SRAM->CPU:从SRAM起始地址\n0x00取得第一条指令
+CPU->CPU:执行
+activate CPU
+@enduml

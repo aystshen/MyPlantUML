@@ -1,0 +1,12 @@
+@startuml
+title 从norflash启动上电取得第一条指令流程（纯硬件操作）
+
+participant norflash
+participant CPU #99FF99
+
+norflash->norflash:norflash地址直接被\n映射到起始地址0x00
+note left : norflash有地址总线，\n因此可以直接寻址
+norflash->CPU:从norflash起始地址\n0x00取得第一条指令
+CPU->CPU:执行
+activate CPU
+@enduml
