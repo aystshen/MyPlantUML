@@ -1,0 +1,43 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor Yellow
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor Yellow
+	ParticipantFontColor Black
+}
+
+title PackageManagerService Update Permissions
+
+participant PackageManagerService.java as PackageManagerService
+participant PermissionsState.java as PermissionsState
+participant Settings.java as Settings
+participant "data/system/packages.xml" as packages.xml
+
+PackageManagerService -> PackageManagerService:PackageManagerService()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:updatePermissionsLPw()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:grantPermissionsLPw()
+activate PackageManagerService
+PackageManagerService -> PermissionsState:grantInstallPermission()\ngrantRuntimePermission()
+activate PermissionsState
+PermissionsState -> PermissionsState:grantPermission()
+activate PermissionsState
+PermissionsState -> PermissionsState:grant()
+activate PermissionsState
+deactivate PermissionsState
+deactivate PermissionsState
+deactivate PermissionsState
+PackageManagerService -> Settings:writeLPr()
+activate Settings
+Settings->packages.xml:Save to file
+deactivate Settings
+deactivate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+
+@enduml
