@@ -1,0 +1,170 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor White
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor White
+	ParticipantFontColor Black
+
+	BoxBorderColor Black
+	BoxBackgroundColor Transparent
+
+	GroupBorderColor Black
+	GroupBackgroundColor White
+}
+
+title Android SensorService
+
+box "Framework"
+participant SystemServer.java as SystemServer
+participant com_android_server_SystemServer.cpp as com_android_server_SystemServer
+participant SensorService.cpp as SensorService
+participant "SensorService::\nSensorEventAckReceiver" as SensorEventAckReceiver
+participant BinderService.h as BinderService
+participant IServiceManager.cpp as IServiceManager
+participant SensorDevice.cpp as SensorDevice
+end box
+box "Hardware"
+participant hardware.c as hardware #ffa500
+participant sensors.h as sensors.h #ffa500
+participant sensors.c as sensors.c #ffa500
+participant nusensors.cpp as nusensors #ffa500
+participant "LightSensor.cpp \nMmaSensor.cpp \nAkmSensor.cpp \nProximitySensor.cpp \nGyroSensor.cpp" as Sensors #ffa500
+end box
+
+SystemServer->SystemServer:run()
+activate SystemServer
+SystemServer->com_android_server_SystemServer:nativeInit()
+com_android_server_SystemServer->com_android_server_SystemServer:android_server_SystemServer_nativeInit()
+activate com_android_server_SystemServer
+com_android_server_SystemServer->SensorService:SensorService::instantiate()
+activate SensorService
+SensorService->BinderService:instantiate()
+activate BinderService
+BinderService->BinderService:publish()
+activate BinderService
+BinderService->IServiceManager:sm->addService()
+activate IServiceManager
+IServiceManager->BinderService
+deactivate IServiceManager
+BinderService->SensorService
+deactivate BinderService
+SensorService->SensorService:onFirstRef()
+activate SensorService
+SensorService->SensorDevice:SensorDevice::getInstance()
+activate SensorDevice
+group #ffe4b5 hw_get_module
+SensorDevice->hardware:hw_get_module()
+note left: 这里介绍如何根据hardware模块名\n获取到对应的hw_module_t结构。\n将根据模块名到system/lib/hw路径\n下搜索对应的so库，并加载so运行。
+activate hardware
+hardware->hardware:hw_get_module_by_class()
+activate hardware
+hardware->hardware:load()
+activate hardware
+hardware->hardware:dlopen("sensors.rk30board.so") \nThe library name consists \nof the module id and subname
+activate hardware
+hardware->hardware:dlsym()
+activate hardware
+hardware->SensorDevice:hw_module_t
+deactivate hardware
+deactivate hardware
+deactivate hardware
+deactivate hardware
+deactivate hardware
+end
+SensorDevice->sensors.h:sensors_open_1()
+activate sensors.h
+sensors.h->sensors.c:open_sensors()
+activate sensors.c
+sensors.c->sensors.c:new sensors_poll_context_t()
+activate sensors.c
+sensors.c->sensors.h:(struct hw_device_t**)device
+deactivate sensors.c
+deactivate sensors.c
+sensors.h->SensorDevice:sensors_poll_device_1_t** device
+deactivate sensors.h
+SensorDevice->sensors.c:get_sensors_list()
+activate sensors.c
+sensors.c->sensors.c:sensors__get_sensors_list()
+activate sensors.c
+sensors.c->SensorDevice:sSensorList
+deactivate sensors.c
+deactivate sensors.c
+group #ffe4b5 Open sensor
+SensorDevice->sensors.c:activate() \n"sensors_poll_device_t:activate()"
+activate sensors.c
+sensors.c->sensors.c:poll__activate()
+activate sensors.c
+sensors.c->nusensors:activate() \n"sensors_poll_context_t:activate()"
+activate nusensors
+nusensors->Sensors:enable()
+activate Sensors
+Sensors->Sensors:open_device()
+activate Sensors
+Sensors->nusensors
+deactivate Sensors
+deactivate Sensors
+nusensors->sensors.c
+deactivate nusensors
+sensors.c->SensorDevice
+deactivate sensors.c
+deactivate sensors.c
+end
+SensorDevice->SensorService
+deactivate SensorDevice
+SensorService->SensorDevice:getSensorList()
+activate SensorDevice
+SensorDevice->sensors.c:get_sensors_list()
+activate sensors.c
+sensors.c->sensors.c:sensors__get_sensors_list()
+activate sensors.c
+sensors.c->SensorDevice:sSensorList
+deactivate sensors.c
+deactivate sensors.c
+SensorDevice->SensorService:sensor_t const* list
+deactivate SensorDevice
+SensorService->SensorService:registerSensor() \n"mSensorList.add() \nmSensorMap.add() \nmLastEventSeen.add()"
+activate SensorService
+deactivate SensorService
+SensorService->SensorService:registerVirtualSensor() \n"RotationVectorSensor \nGravitySensor \nLinearAccelerationSensor \nOrientationSensor \nCorrectedGyroSensor \nGyroDriftSensor"
+activate SensorService
+deactivate SensorService
+loop #ffe4b5 Read event
+SensorService->SensorEventAckReceiver:SensorEventAckReceiver->run()
+deactivate SensorService
+activate SensorEventAckReceiver
+SensorEventAckReceiver->SensorEventAckReceiver:threadLoop()
+activate SensorEventAckReceiver
+SensorEventAckReceiver->SensorService:looper->pollOnce()
+deactivate SensorEventAckReceiver
+deactivate SensorEventAckReceiver
+SensorService->SensorService:threadLoop()
+activate SensorService
+SensorService->SensorDevice:device.poll()
+activate SensorDevice
+SensorDevice->nusensors:mSensorDevice->poll
+activate nusensors
+nusensors->nusensors:poll__poll()
+activate nusensors
+nusensors->nusensors:pollEvents()
+activate nusensors
+nusensors->Sensors:readEvents()
+activate Sensors
+Sensors->nusensors:sensors_event_t* data
+deactivate Sensors
+nusensors->SensorDevice:sensors_event_t* buffer
+deactivate nusensors
+deactivate nusensors
+deactivate nusensors
+deactivate nusensors
+SensorDevice->SensorService:sensors_event_t *mSensorEventBuffer
+deactivate SensorDevice
+deactivate SensorService
+deactivate SensorService
+deactivate SensorService
+end
+
+@enduml

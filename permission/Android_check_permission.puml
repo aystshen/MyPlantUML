@@ -3,22 +3,30 @@ skinparam sequence {
 	ArrowColor Black
 	ActorBorderColor Black
 	LifeLineBorderColor Black
-	LifeLineBackgroundColor Yellow
+	LifeLineBackgroundColor White
 
 	ParticipantBorderColor Black
-	ParticipantBackgroundColor Yellow
+	ParticipantBackgroundColor White
 	ParticipantFontColor Black
+
+	BoxBorderColor Black
+	BoxBackgroundColor Transparent
+
+	GroupBorderColor Black
+	GroupBackgroundColor White
 }
 
-title Check Permission
+title Android Check Permission
 
 participant ContextImpl.java as ContextImpl
 participant ActivityManagerService.java as ActivityManagerService
 participant ActivityManager.java as ActivityManager
 participant PackageManagerService.java as PackageManagerService
 participant PermissionsState.java as PermissionsState
-participant "Settings.java\n(com/android/server/pm/)" as Settings #99FF99
-participant "SettingBase.java\n(com/android/server/pm/)" as SettingBase #99FF99
+box
+participant "Settings.java\n(com/android/server/pm/)" as Settings #ffa500
+participant "SettingBase.java\n(com/android/server/pm/)" as SettingBase #ffa500
+end box
 
 ->ContextImpl:checkPermission()
 activate ContextImpl
