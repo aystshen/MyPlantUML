@@ -1,0 +1,244 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor White
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor White
+	ParticipantFontColor Black
+
+	BoxBorderColor Black
+	BoxBackgroundColor Transparent
+
+	GroupBorderColor Black
+	GroupBackgroundColor White
+}
+
+participant "/system/etc/\ninit/audioserver.rc" as init
+participant "frameworks/av/\nmedia/audioserver/\nmain_audioserver.cpp" as audioserver
+participant "frameworks/av/\nservices/audioflinger/\nAudioFlinger.cpp" as AudioFlinger
+participant "frameworks/av/\nservices/audiopolicy/service/\nAudioPolicyService.cpp" as AudioPolicyService
+participant "frameworks/av/\nservices/audiopolicy/manager/\nAudioPolicyFactory.cpp" as AudioPolicyFactory
+participant "frameworks/av/\nservices/audiopolicy/\nmanagerdefault/\nAudioPolicyManager.cpp" as AudioPolicyManager
+participant "frameworks/av/\nservices/audiopolicy/service/\nAudioPolicyClientImpl.cpp" as AudioPolicyClientImpl
+participant "frameworks/av/\nmedia/libaudiohal/\nDevicesFactoryHalLocal.cpp" as DevicesFactoryHalLocal
+participant "frameworks/av/\nservices/audioflinger/\nAudioHwDevice.cpp" as AudioHwDevice
+participant "frameworks/av/\nservices/audioflinger/\nAudioStreamOut.cpp" as AudioStreamOut
+participant "frameworks/av/\nmedia/libaudiohal/\nDeviceHalLocal.cpp" as DeviceHalLocal
+box hardware
+participant "hardware/rockchip/\naudio/tinyalsa_hal/\naudio_hw.c" as audio_hw #ffa500
+end box
+
+init->audioserver:
+note right:service audioserver /system/bin/audioserver\
+               \n   class main\
+               \n   user audioserver\
+               \n   # media gid needed for /dev/fm (radio) and for /data/misc/media (tee)\
+               \n   group audio camera drmrpc inet media mediadrm net_bt net_bt_admin net_bw_acct\
+               \n   ioprio rt 4\
+               \n   writepid /dev/cpuset/foreground/tasks /dev/stune/foreground/tasks\
+               \n   onrestart restart audio-hal-2-0
+
+audioserver->audioserver:main()
+activate audioserver
+
+audioserver->AudioFlinger:AudioFlinger::instantiate()
+activate AudioFlinger
+AudioFlinger->AudioFlinger:onFirstRef()
+activate AudioFlinger
+AudioFlinger->AudioFlinger:new PatchPanel(this)
+activate AudioFlinger
+AudioFlinger->audioserver
+deactivate AudioFlinger
+deactivate AudioFlinger
+deactivate AudioFlinger
+
+audioserver->AudioPolicyService:AudioPolicyService::instantiate()
+activate AudioPolicyService
+AudioPolicyService->AudioPolicyService:onFirstRef()
+activate AudioPolicyService
+AudioPolicyService->AudioPolicyFactory:createAudioPolicyManager()
+activate AudioPolicyFactory
+
+AudioPolicyFactory->AudioPolicyManager:new AudioPolicyManager()
+activate AudioPolicyManager
+AudioPolicyManager->AudioPolicyManager:deserializeAudioPolicyXmlConfig(config)
+note left:解析 Audio 配置文件\
+ \n \
+ \n将设备支持的音频输出设备保存在 mAvailableOutputDevices 变量中;\
+ \n将设备支持的音频输入设备保存在 mAvailableInputDevices 变量中;\
+ \n将设备的默认音频输出设备保存在 mDefaultOutputDevice 变量中;\
+ \n \
+ \n配置文件搜索路径：\
+ \n{"/odm/etc", "/vendor/etc", "/system/etc"} \
+ \n配置文件名：\
+ \naudio_policy_configuration.xml
+
+AudioPolicyManager->AudioPolicyManager:mVolumeCurves->\ninitializeVolumeCurves(speakerDrcEnabled)
+note left:设置音量调节曲线
+
+loop 根据音频策略配置文件，获取到设备所支持的音频设备信息（包括设备是否支持 Offload、Direct 模式输出，各输\
+    \n入输出 profile 所支持的采样率、通道数、数据格式等），加载全部 HwModule，为之创建所有非 direct 输出\
+    \n类型的 outputStream 和所有 inputStream，并创建相应的 playbackThread 或 recordThread 线程。\
+    \n \
+    \ndumpsys media.audio_policy 查看所有 HW Module 及 ouput/input device:\
+    \nHW Module 1: primary\
+    \n      output 0: primary output\
+    \n      output 1: spdif_passthrough\
+    \n      input 0: primary output\
+    \nHW Module 2: a2dp（蓝牙）\
+    \n      output 0: a2dp output\
+    \n      input 0: a2dp input\
+    \nHW Module 3: usb\
+    \n      output 0: usb_accessory output\
+    \n      output 1: usb_device output
+
+group loadHwModule
+AudioPolicyManager->AudioPolicyClientImpl:mpClientInterface->\nloadHwModule(mHwModules[i]->getName())
+note right:加载audio hardware相关so，如：\
+    \naudio.primary.default.so\
+    \naudio.r_submix.default.so\
+    \naudio.usb.default.so\
+    \naudio.a2dp.default.so
+activate AudioPolicyClientImpl
+AudioPolicyClientImpl->AudioFlinger:af->loadHwModule(name)
+activate AudioFlinger
+AudioFlinger->AudioFlinger:loadHwModule_l()
+activate AudioFlinger
+AudioFlinger->DevicesFactoryHalLocal:mDevicesFactoryHal->openDevice(name, &dev)
+activate DevicesFactoryHalLocal
+DevicesFactoryHalLocal->DevicesFactoryHalLocal:load_audio_interface()
+activate DevicesFactoryHalLocal
+DevicesFactoryHalLocal->DevicesFactoryHalLocal:hw_get_module_by_class()
+DevicesFactoryHalLocal->AudioFlinger
+deactivate DevicesFactoryHalLocal
+deactivate DevicesFactoryHalLocal
+AudioFlinger->AudioPolicyClientImpl
+deactivate AudioFlinger
+deactivate AudioFlinger
+AudioPolicyClientImpl->AudioPolicyManager
+deactivate AudioPolicyClientImpl
+end
+
+
+group openOutput \
+    \n如果是output设备，则为当前 module.profile打开对\
+    \n应的 outputStream 并创建 playbackThread 线程。
+AudioPolicyManager->AudioPolicyClientImpl:mpClientInterface->openOutput()
+activate AudioPolicyClientImpl
+AudioPolicyClientImpl->AudioFlinger:af->openOutput(module, output, config, devices, address, latencyMs, flags);
+activate AudioFlinger
+AudioFlinger->AudioFlinger:openOutput_l()
+activate AudioFlinger
+AudioFlinger->AudioHwDevice:outHwDev->openOutputStream()
+activate AudioHwDevice
+AudioHwDevice->AudioStreamOut:outputStream->open()
+activate AudioStreamOut
+AudioStreamOut->DeviceHalLocal:hwDev()->openOutputStream()
+activate DeviceHalLocal
+DeviceHalLocal->audio_hw:mDev->open_output_stream()
+activate audio_hw
+audio_hw->DeviceHalLocal
+deactivate audio_hw
+DeviceHalLocal->AudioStreamOut
+deactivate DeviceHalLocal
+AudioStreamOut->AudioHwDevice
+deactivate AudioStreamOut
+AudioHwDevice->AudioFlinger
+deactivate AudioHwDevice
+AudioFlinger->AudioFlinger:Create PlaybackThread
+activate AudioFlinger
+note right:AUDIO_OUTPUT_FLAG_MMAP_NOIRQ\
+    \n  new MmapPlaybackThread() \
+    \n  可在与支持 MMAP 的 HAL 和驱动程序结合使用时缩短延迟时间 \
+    \n \
+    \nAUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD \
+    \n  new OffloadThread() \
+    \n  表示音频流没有经过软件解码，需要输出到硬件解码器，由硬件解码器进行解码 \
+    \n \
+    \nAUDIO_OUTPUT_FLAG_DIRECT \
+    \n  new DirectOutputThread() \
+    \n  表示音频流直接输出到音频设备，不需要软件混音，一般用于 HDMI 设备声音输出 \
+    \n \
+    \nAUDIO_OUTPUT_FLAG_PRIMARY \
+    \n  new MixerThread() \
+    \n  表示音频流需要输出到主输出设备，一般用于铃声类声音 \
+    \n \
+    \nAUDIO_OUTPUT_FLAG_FAST \
+    \n  new MixerThread() \
+    \n  表示音频流需要快速输出到音频设备，一般用于按键音、游戏背景音等对时延要求高的场景 \
+    \n \
+    \nAUDIO_OUTPUT_FLAG_DEEP_BUFFER \
+    \n  new MixerThread() \
+    \n  表示音频流输出可以接受较大的时延，一般用于音乐、视频播放等对时延要求不高的场景 \
+
+AudioFlinger->AudioPolicyClientImpl
+deactivate AudioFlinger
+deactivate AudioFlinger
+deactivate AudioFlinger
+deactivate AudioFlinger
+AudioPolicyClientImpl->AudioPolicyManager
+deactivate AudioPolicyClientImpl
+end
+
+
+group openInput \
+   \n如果是 input 设备，则为当前 module.profile打开对\
+   \n应的 inputStream 并创建 recordThread 线程。
+AudioPolicyManager->AudioPolicyClientImpl:mpClientInterface->openInput()
+activate AudioPolicyClientImpl
+AudioPolicyClientImpl->AudioFlinger:af->openInput(module, input, config, device, address, source, flags)
+activate AudioFlinger
+AudioFlinger->AudioFlinger:openInput_l()
+activate AudioFlinger
+AudioFlinger->DeviceHalLocal:inHwHal->openInputStream()
+activate DeviceHalLocal
+DeviceHalLocal->audio_hw:mDev->open_input_stream()
+activate audio_hw
+audio_hw->DeviceHalLocal
+deactivate audio_hw
+DeviceHalLocal->AudioFlinger
+deactivate DeviceHalLocal
+AudioFlinger->AudioFlinger:Create RecordThread
+activate AudioFlinger
+note right:AUDIO_INPUT_FLAG_MMAP_NOIRQ\
+    \n  new MmapCaptureThread() \
+    \n  可在与支持 MMAP 的 HAL 和驱动程序结合使用时缩短延迟时间 \
+    \n \
+    \n其它 \
+    \n  new RecordThread()
+
+AudioFlinger->AudioPolicyClientImpl
+deactivate AudioFlinger
+deactivate AudioFlinger
+deactivate AudioFlinger
+AudioPolicyClientImpl->AudioPolicyManager
+deactivate AudioPolicyClientImpl
+end
+end
+
+
+AudioPolicyManager->AudioPolicyManager:updateDevicesAndOutputs()
+note left:更新系统缓存的音频输出设备信息
+
+AudioPolicyManager->AudioPolicyFactory
+deactivate AudioPolicyManager
+AudioPolicyFactory->AudioPolicyService
+deactivate AudioPolicyFactory
+AudioPolicyService->audioserver
+deactivate AudioPolicyService
+deactivate AudioPolicyService
+
+note right:至此，Android 系统中音频模块的启动就完成了，\
+    \n两大关键音频组件 AudioFlinger 和 AudioPolicyService 均已创建并运行，\
+    \n设备所支持的音频输入输出硬件信息也已经被 AudioPolicyManager 所解析。\
+    \n如果此时发生了插入耳机等操作，则 AudioPolicyService 将会接收到底层通知\
+    \n并把 Audio Route 切换到 WiredHeadset 等响应配置；如果此时在 APP 发生\
+    \n了播放音乐的操作，则 AudioFlinger 会接收到上层通知并创建相应 Track。\
+    \n \
+    \n之后设备开始播放声音时，音频数据将从 AudioTrack 传输到 AudioFlinger，\
+    \n再传输到 Audio HAL，直到最终写入硬件。
+
+@enduml

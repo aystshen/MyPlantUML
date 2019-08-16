@@ -1,0 +1,77 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor White
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor White
+	ParticipantFontColor Black
+
+	BoxBorderColor Black
+	BoxBackgroundColor Transparent
+
+	GroupBorderColor Black
+	GroupBackgroundColor White
+}
+
+title General Upgrade Sequence Chart
+
+participant "Device(Android/App/Mcu)" as device
+participant Server as server
+participant "Storage server" as storage
+
+activate device
+device -> server:request to upgrade
+deactivate device
+activate server
+note left:请求升级时Device端至少带上下面信息：\
+\npid：产品id（由Server端统一分配） \
+\nmac：以太网或WiFi地址 \
+\nsn：序列号 \
+\ntype：设备类型（Android系统、App、Mcu） \
+\nversionCode：当前版本号（整型） \
+\nversionName：当前版本号（字符串，如：1.2.0） \
+\n\n其中Android升级还将带上下面几个参数： \
+\ndevice：产品名 \
+\nmodel：型号 \
+\nboard：主板 \
+
+server -> device:response
+deactivate server
+activate device
+note right:无升级：\n返回状态告知Device端无需升级。\
+\n\n有升级：\nServer端返回时至少带上下面信息：\
+\npid：产品id（由Server端统一分配） \
+\nupgradeType：升级方式（推荐升级、强制升级） \
+\nversionCode：可升级版本号（整型） \
+\nversionName：可升级版本号（字符串，如：1.2.0） \
+\nsize：升级包大小 \
+\nmd5：升级包md5 \
+\ndesc：版本描述信息（release notes） \
+\nurl：升级包下载地址（需要支持断点续传）\
+
+device -> device:prompt to upgrade
+activate device
+deactivate device
+
+device -> storage:download upgrade package
+activate storage
+storage -> device:response
+deactivate storage
+device -> device:verify
+activate device
+deactivate device
+device -> device:install
+activate device
+deactivate device
+
+device -> server:report upgrade results
+activate server
+server -> device:response
+deactivate server
+
+deactivate device
+
+@enduml

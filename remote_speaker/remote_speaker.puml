@@ -1,0 +1,50 @@
+@startuml
+skinparam sequence {
+	ArrowColor Black
+	ActorBorderColor Black
+	LifeLineBorderColor Black
+	LifeLineBackgroundColor White
+
+	ParticipantBorderColor Black
+	ParticipantBackgroundColor White
+	ParticipantFontColor Black
+
+	BoxBorderColor Black
+	BoxBackgroundColor Transparent
+
+	GroupBorderColor Black
+	GroupBackgroundColor White
+}
+
+participant "手机" as phone
+participant "电视" as tv
+
+tv -> tv:观看节目
+activate tv
+
+phone -> tv:连接电视
+activate phone
+tv -> phone
+
+phone -> tv:选择手机发声
+tv -> tv:切换声音至手机输出
+activate tv
+
+loop #ffe4b5
+tv -> tv: ①截获声音
+activate tv
+tv -> phone:声音传回手机
+deactivate tv
+deactivate tv
+deactivate tv
+activate phone
+phone -> phone:播放声音
+activate phone
+deactivate phone
+deactivate phone
+deactivate phone
+end
+
+
+
+@enduml
