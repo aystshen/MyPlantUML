@@ -1,0 +1,84 @@
+@startuml
+participant PackageManagerService.java as PackageManagerService
+participant ParallelPackageParser.java as ParallelPackageParser
+participant PackageParser.java as PackageParser
+participant Settings.java as Settings
+participant "data/system/packages.xml" as packages.xml
+
+PackageManagerService -> PackageManagerService:PackageManagerService()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/vendor/overlay"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/system/framework"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/system/priv-app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/system/app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/vendor/app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/oem/app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/oem/bundled_uninstall_gone-app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/oem/bundled_uninstall_back-app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/oem/bundled_persist-app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/data/app"
+PackageManagerService -> PackageManagerService:scanDirTracedLI() "/data/app-private"
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:scanDirLI()
+activate PackageManagerService
+PackageManagerService -> ParallelPackageParser:submit()
+activate ParallelPackageParser
+ParallelPackageParser -> ParallelPackageParser:parsePackage()
+activate ParallelPackageParser
+ParallelPackageParser -> PackageParser:parsePackage()
+activate PackageParser
+PackageParser -> PackageParser:isDirectory()? parseClusterPackage()
+activate PackageParser
+PackageParser -> PackageParser:parseClusterPackageLite()
+activate PackageParser
+PackageParser -> PackageParser:parseApkLite()
+activate PackageParser
+PackageParser -> ParallelPackageParser:PackageParser.Package
+deactivate PackageParser
+deactivate PackageParser
+deactivate PackageParser
+PackageParser -> PackageParser:!isDirectory()? parseMonolithicPackage()
+activate PackageParser
+PackageParser -> PackageParser:parseMonolithicPackageLite()
+activate PackageParser
+PackageParser -> PackageParser:parseApkLite()
+activate PackageParser
+deactivate PackageParser
+PackageParser -> PackageParser:parseBaseApk()
+activate PackageParser
+PackageParser -> ParallelPackageParser:PackageParser.Package
+deactivate PackageParser
+deactivate PackageParser
+deactivate PackageParser
+deactivate PackageParser
+deactivate ParallelPackageParser
+deactivate ParallelPackageParser
+PackageManagerService -> ParallelPackageParser:take()
+activate ParallelPackageParser
+ParallelPackageParser -> PackageManagerService:ParallelPackageParser.ParseResult
+deactivate ParallelPackageParser
+PackageManagerService -> PackageManagerService:scanPackageLI()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:scanPackageInternalLI()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:scanPackageLI()
+activate PackageManagerService
+PackageManagerService -> PackageManagerService:scanPackageDirtyLI()
+activate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+deactivate PackageManagerService
+PackageManagerService -> PackageManagerService:updatePermissionsLPw()
+activate PackageManagerService
+deactivate PackageManagerService
+PackageManagerService -> Settings:writeLPr()
+activate Settings
+Settings->packages.xml:Save to file
+deactivate Settings
+deactivate PackageManagerService
+deactivate PackageManagerService
+
+@enduml

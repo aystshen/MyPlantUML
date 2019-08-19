@@ -1,0 +1,233 @@
+@startuml
+participant Application
+participant "frameworks/base/\nmedia/java/android/\nmedia/AudioTrack.java" as AudioTrack
+participant "frameworks/base/\ncore/jni/\nandroid_media_AudioTrack.cpp" as AudioTrack_jni
+participant "frameworks/av/\nmedia/libaudioclient/\nAudioTrack.cpp" as AudioTrack_native
+participant "frameworks/av/\nmedia/libaudioclient/\nAudioSystem.cpp" as AudioSystem
+participant "frameworks/av/\nservices/audiopolicy/service/\nAudioPolicyInterfaceImpl.cpp" as AudioPolicyInterfaceImpl
+participant "frameworks/av/\nservices/audiopolicy/\nmanagerdefault/\nAudioPolicyManager.cpp" as AudioPolicyManager
+participant "frameworks/av/\nservices/audioflinger/\nAudioFlinger.cpp" as AudioFlinger
+participant "frameworks/av/\nservices/audioflinger/\nThreads.cpp" as PlaybackThread
+participant "frameworks/av/\nservices/audioflinger/\nPlaybackTracks.h" as PlaybackTracks
+participant "frameworks/av/\nservices/audioflinger/\nTracks.cpp" as Tracks
+participant "frameworks/av/\nservices/audioflinger/\nAudioStreamOut.cpp" as AudioStreamOut
+participant "frameworks/av/\nmedia/libaudiohal/\nStreamHalLocal.cpp" as StreamHalLocal
+participant "frameworks/av/\nmedia/libaudiohal/\nDeviceHalLocal.cpp" as DeviceHalLocal
+box hardware
+participant "hardware/rockchip/\naudio/tinyalsa_hal/\naudio_hw.c" as audio_hw #ffa500
+end box
+
+activate Application
+Application->AudioTrack:new AudioTrack()
+activate AudioTrack
+AudioTrack->AudioTrack_jni:native_setup()
+activate AudioTrack_jni
+AudioTrack_jni->AudioTrack_native:new AudioTrack()
+activate AudioTrack_native
+AudioTrack_native->AudioTrack_jni
+deactivate AudioTrack_native
+AudioTrack_jni->AudioTrack_native:lpTrack->set
+activate AudioTrack_native
+AudioTrack_native->AudioTrack_native:new AudioTrackThread()
+activate AudioTrack_native
+deactivate AudioTrack_native
+AudioTrack_native->AudioTrack_native:createTrack_l()
+activate AudioTrack_native
+
+
+group 获取当前流对应的 output 通路，通过下面命令可以看到所有的 output 通路：\
+    \n dumpsys media.audio_policy
+AudioTrack_native->AudioSystem:AudioSystem::getOutputForAttr()
+activate AudioSystem
+AudioSystem->AudioPolicyInterfaceImpl:getOutputForAttr()
+activate AudioPolicyInterfaceImpl
+AudioPolicyInterfaceImpl->AudioPolicyManager:getOutputForAttr()
+activate AudioPolicyManager
+AudioPolicyManager->AudioPolicyManager:getStrategyForAttr()
+note left:获取路由策略
+AudioPolicyManager->AudioPolicyManager:getDeviceForStrategy()
+note left:获取策略对应的设备
+AudioPolicyManager->AudioPolicyManager:getOutputForDevice()
+note left:获取对应设备的output
+AudioPolicyManager->AudioPolicyInterfaceImpl
+deactivate AudioPolicyManager
+AudioPolicyInterfaceImpl->AudioSystem
+deactivate AudioPolicyInterfaceImpl
+AudioSystem->AudioTrack_native
+deactivate AudioSystem
+end
+
+
+group 服务端 AudioFlinger 调用 PlaybackThread 的 createTrack_l 创建 Track
+AudioTrack_native->AudioFlinger:audioFlinger->createTrack()
+activate AudioFlinger
+AudioFlinger->AudioFlinger:checkPlaybackThread_l(output)
+activate AudioFlinger
+deactivate AudioFlinger
+note left:根据 output 通路选择对应的 PlaybackThread
+AudioFlinger->PlaybackThread:thread->createTrack_l()
+activate PlaybackThread
+PlaybackThread->PlaybackTracks:new Track()
+activate PlaybackTracks
+PlaybackTracks->PlaybackThread
+deactivate PlaybackTracks
+PlaybackThread->AudioFlinger
+deactivate PlaybackThread
+AudioFlinger->AudioTrack_native
+deactivate AudioFlinger
+end
+
+
+AudioTrack_native->AudioTrack_jni
+deactivate AudioTrack_native
+deactivate AudioTrack_native
+AudioTrack_jni->AudioTrack
+deactivate AudioTrack_jni
+AudioTrack->Application
+deactivate AudioTrack
+
+
+group Play（播放）
+Application->AudioTrack:play()
+activate AudioTrack
+AudioTrack->AudioTrack:startImpl()
+activate AudioTrack
+AudioTrack->AudioTrack_jni:native_start()
+activate AudioTrack_jni
+AudioTrack_jni->AudioTrack_native:start()
+activate AudioTrack_native
+AudioTrack_native->Tracks:mAudioTrack->start()
+activate Tracks
+note left:AudioFlinger::TrackHandle::start()
+Tracks->PlaybackThread:mTrack->start()
+activate PlaybackThread
+note left:AudioFlinger::PlaybackThread::Track::start()
+PlaybackThread->PlaybackThread:playbackThread->addTrack_l()
+activate PlaybackThread
+PlaybackThread->PlaybackThread:mActiveTracks.add(track)
+activate PlaybackThread
+deactivate PlaybackThread
+note left:PlaybackTread 的 addTrack_l 主要工作是添加 track 到\
+    \nmActiveTracks，并激活沉睡的 PlaybackTread
+PlaybackThread->PlaybackThread:onAddNewTrack_l()
+activate PlaybackThread
+PlaybackThread->PlaybackThread:broadcast_l()
+activate PlaybackThread
+PlaybackThread->PlaybackThread:mWaitWorkCV.broadcast()
+activate PlaybackThread
+PlaybackThread->Tracks
+deactivate PlaybackThread
+deactivate PlaybackThread
+deactivate PlaybackThread
+deactivate PlaybackThread
+deactivate PlaybackThread
+Tracks->AudioTrack_native
+deactivate Tracks
+AudioTrack_native->AudioTrack_jni
+deactivate AudioTrack_native
+AudioTrack_jni->AudioTrack
+deactivate AudioTrack_jni
+AudioTrack->Application
+deactivate AudioTrack
+deactivate AudioTrack
+end
+
+
+group Write（写入音频数据）
+Application->AudioTrack:write()
+activate AudioTrack
+AudioTrack->AudioTrack_jni:native_write_byte()
+activate AudioTrack_jni
+AudioTrack_jni->AudioTrack_jni:writeToTrack()
+activate AudioTrack_jni
+AudioTrack_jni->AudioTrack_native:track->write()
+
+activate AudioTrack_native
+loop 循环写数据，直到数据全部写完
+AudioTrack_native->AudioTrack_native:obtainBuffer()
+activate AudioTrack_native
+deactivate AudioTrack_native
+note left:使用 obtainBuffer 获取一块共享内存
+AudioTrack_native->AudioTrack_native:memcpy(audioBuffer.i8, buffer, toWrite);
+note left:将数据 copy 至共享内存
+activate AudioTrack_native
+deactivate AudioTrack_native
+AudioTrack_native->AudioTrack_native:releaseBuffer();
+note left:释放共享内存
+activate AudioTrack_native
+deactivate AudioTrack_native
+end
+
+AudioTrack_native->AudioTrack_jni
+deactivate AudioTrack_native
+AudioTrack_jni->AudioTrack
+deactivate AudioTrack_jni
+deactivate AudioTrack_jni
+AudioTrack->Application
+deactivate AudioTrack
+end
+
+
+loop PlaybackThread 在 audioserver 启动后运行，并一直处于等待状态，直到 AudioTrack 的到来，\
+    \n当有新的 AudioTrack 插入，有数据更新时，线程执行，将数据写入对应的声音输出设备。\
+    \n \
+    \n存在多个 PlaybackThread ，一种 output device 对应一个 PlaybackThread，每个 PlaybackThread \
+    \n只负责将数据写入自已对应的设备。具体包含哪些 output device 可以通用命令 [dumpsys media.audio_policy] \
+    \n查看，比如常见的 deveice有：\
+    \n \
+    \nHW Module 1: primary\
+    \n      output 0: primary output\
+    \n      output 1: spdif_passthrough\
+    \n      input 0: primary output\
+    \nHW Module 2: a2dp（蓝牙）\
+    \n      output 0: a2dp output\
+    \n      input 0: a2dp input\
+    \nHW Module 3: usb\
+    \n      output 0: usb_accessory output\
+    \n      output 1: usb_device output
+
+PlaybackThread->PlaybackThread:threadLoop()
+activate PlaybackThread
+PlaybackThread->PlaybackThread:threadLoop_mix()
+note left:混音
+activate PlaybackThread
+deactivate PlaybackThread
+
+PlaybackThread->PlaybackThread:threadLoop_write()
+note left:写到音频设备
+activate PlaybackThread
+PlaybackThread->AudioStreamOut:mOutput->write()
+activate AudioStreamOut
+AudioStreamOut->StreamHalLocal:stream->write()
+activate StreamHalLocal
+StreamHalLocal->audio_hw:mStream->write()
+note right:out_write()
+activate audio_hw
+audio_hw->audio_hw:start_output_stream()
+activate audio_hw
+audio_hw->audio_hw:pcm_open()
+note left:打开声卡驱动
+activate audio_hw
+deactivate audio_hw
+deactivate audio_hw
+audio_hw->audio_hw:pcm_write()
+note left:将数据写入声卡驱动
+activate audio_hw
+audio_hw->StreamHalLocal
+deactivate audio_hw
+deactivate audio_hw
+deactivate audio_hw
+StreamHalLocal->AudioStreamOut
+deactivate StreamHalLocal
+AudioStreamOut->PlaybackThread
+deactivate AudioStreamOut
+deactivate PlaybackThread
+
+PlaybackThread->PlaybackThread:threadLoop_removeTracks()
+note left:播放完成，删除已经播放的 tracks
+activate PlaybackThread
+deactivate PlaybackThread
+deactivate PlaybackThread
+end
+
+@enduml
